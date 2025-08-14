@@ -1,5 +1,6 @@
 import express, { Request, Response } from "express";
 import cors from "cors";
+import { randomUUID } from "crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
@@ -7,7 +8,7 @@ import { z } from "zod";
 // Create MCP server
 const server = new McpServer({ name: "mcp-wp", version: "1.0.0" });
 
-// Temporary test tool
+// Temporary test tool (we'll swap in the WP tools after deploy is green)
 server.registerTool(
   "ping",
   {
@@ -22,7 +23,7 @@ server.registerTool(
 
 // TODO: Import and register the actual WordPress tools from server.ts
 // Example:
-// import { registerWordPressTools } from "./server";
+// import { registerWordPressTools } from "./server-tools";
 // registerWordPressTools(server);
 
 const app = express();
@@ -31,13 +32,14 @@ app.use(cors({ exposedHeaders: ["mcp-session-id"] }));
 
 // Main MCP endpoint
 app.all("/mcp", async (req: Request, res: Response) => {
-  // ✅ pass an options object (even empty) — required by your SDK version
-  const transport = new StreamableHTTPServerTransport({});
+  // This SDK version requires options, including a sessionIdGenerator
+  const transport = new StreamableHTTPServerTransport({
+    // stateful sessions generally play nicest with tools/clients
+    stateful: true,
+    sessionIdGenerator: () => randomUUID()
+  });
 
-  // connect once per request
   await server.connect(transport);
-
-  // handle this HTTP request
   await transport.handleRequest(req, res);
 });
 
