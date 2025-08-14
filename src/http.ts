@@ -31,9 +31,14 @@ app.use(cors({ exposedHeaders: ["mcp-session-id"] }));
 
 // Main MCP endpoint
 app.all("/mcp", async (req: Request, res: Response) => {
-  const transport = new StreamableHTTPServerTransport({ req, res });
+  // ✅ constructor takes no args
+  const transport = new StreamableHTTPServerTransport();
+
+  // connect once per request
   await server.connect(transport);
-  await transport.handleRequest();
+
+  // ✅ pass req/res to handleRequest
+  await transport.handleRequest(req, res);
 });
 
 const port = process.env.PORT ? Number(process.env.PORT) : 3000;
