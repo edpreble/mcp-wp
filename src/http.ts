@@ -31,13 +31,13 @@ app.use(cors({ exposedHeaders: ["mcp-session-id"] }));
 
 // Main MCP endpoint
 app.all("/mcp", async (req: Request, res: Response) => {
-  // ✅ constructor takes no args
-  const transport = new StreamableHTTPServerTransport();
+  // ✅ pass an options object (even empty) — required by your SDK version
+  const transport = new StreamableHTTPServerTransport({});
 
   // connect once per request
   await server.connect(transport);
 
-  // ✅ pass req/res to handleRequest
+  // handle this HTTP request
   await transport.handleRequest(req, res);
 });
 
