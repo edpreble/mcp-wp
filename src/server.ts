@@ -1,12 +1,12 @@
 // src/server.ts
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 
 /**
- * Minimal stdio server kept only so TypeScript build succeeds.
- * Your production app uses the HTTP server in src/http.ts.
+ * Minimal server definition kept only so TypeScript builds cleanly.
+ * Production traffic is handled by src/http.ts (Streamable HTTP).
  */
+
 const server = new McpServer({ name: "mcp-wp", version: "0.0.3" });
 
 server.registerTool(
@@ -21,12 +21,6 @@ server.registerTool(
   })
 );
 
-// If someone runs the CLI (stdio) locally, this will work.
-// On Railway we start the HTTP transport via `npm run start:http`.
-if (import.meta.main) {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  await transport.start();
-}
-
+// Export the instance for any local usage/tests; do not auto-start here.
 export { server };
+export default server;
