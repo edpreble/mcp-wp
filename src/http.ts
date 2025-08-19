@@ -48,11 +48,11 @@ app.get("/health", (_req, res) => res.status(200).json({ ok: true }));
 app.options("/mcp", (_req, res) => res.sendStatus(204));
 
 /**
- * Force JSON replies for /mcp to avoid 406 "Not Acceptable" from picky clients.
- * (You can remove this later if you want true content negotiation.)
+ * Force SSE replies for /mcp to avoid 406 "Not Acceptable" with clients
+ * that expect Server-Sent Events for Streamable HTTP.
  */
 app.use("/mcp", (req, _res, next) => {
-  req.headers["accept"] = "application/json";
+  req.headers["accept"] = "text/event-stream";
   next();
 });
 
