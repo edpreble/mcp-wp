@@ -38,7 +38,7 @@ app.use(
   })
 );
 
-// Basic root + health for Railway and quick checks
+// Root + health for Railway and quick checks
 app.get("/", (_req, res) =>
   res.status(200).send("mcp-wp (Streamable HTTP) is running. Try POST /mcp")
 );
@@ -48,15 +48,19 @@ app.get("/health", (_req, res) => res.status(200).json({ ok: true }));
 app.options("/mcp", (_req, res) => res.sendStatus(204));
 
 /**
- * Force SSE replies for /mcp to avoid 406 "Not Acceptable" with clients
- * that expect Server-Sent Events for Streamable HTTP.
+ * Normalize response negotiation for /mcp to avoid 406:
+ * - Allow both JSON and SSE. (Some clients prefer one or the other.)
+ * - Set a friendly hint header used by some client builds.
  */
 app.use("/mcp", (req, _res, next) => {
-  req.headers["accept"] = "text/event-stream";
+  // Accept either format; order doesn't matter
+  req.headers["accept"] = "application/json, text/event-stream";
+  // Some client/server combos also look at this hint — harmless if ignored
+  (req.headers as any)["x-mcp-response-format"] = "auto";
   next();
 });
 
-// Simple request logger (shows Accept & User-Agent). Also logs status on finish.
+// Simple request logger; also logs final status
 app.use((req, res, next) => {
   const started = new Date();
   const ua = req.headers["user-agent"] ?? "-";
@@ -64,9 +68,7 @@ app.use((req, res, next) => {
   console.log(`[${started.toISOString()}] ${req.method} ${req.path} ua=${ua} accept=${accept}`);
   res.on("finish", () => {
     const ended = new Date();
-    console.log(
-      `[${ended.toISOString()}] DONE ${req.method} ${req.path} -> ${res.statusCode}`
-    );
+    console.log(`[${ended.toISOString()}] DONE ${req.method} ${req.path} -> ${res.statusCode}`);
   });
   next();
 });
