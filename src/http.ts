@@ -29,13 +29,14 @@ server.registerTool(
 const app = express();
 
 // ⚠️ Do NOT use express.json() on /mcp — the MCP transport reads the raw body itself.
-// We keep CORS and everything else, but no body parser middleware.
+// Keep CORS, health endpoints, logging, and negotiation helpers.
 
 app.use(
   cors({
     origin: true,
     credentials: true,
-    exposedHeaders: ["mcp-session-id"],
+    // IMPORTANT: expose the EXACT session header so browser/Electron clients (Inspector, n8n UI) can read it
+    exposedHeaders: ["Mcp-Session-Id"],
   })
 );
 
