@@ -10,16 +10,16 @@ import { z } from "zod";
  */
 const server = new McpServer({ name: "mcp-wp", version: "1.0.0" });
 
-// Minimal test tool
+// Minimal test tool so you can verify end-to-end calls
 server.registerTool(
   "ping",
   {
     title: "Ping",
     description: "Health check tool",
-    inputSchema: { msg: z.string().optional() }
+    inputSchema: { msg: z.string().optional() },
   },
   async ({ msg }) => ({
-    content: [{ type: "text", text: `pong${msg ? ": " + msg : ""}` }]
+    content: [{ type: "text", text: `pong${msg ? ": " + msg : ""}` }],
   })
 );
 
@@ -28,15 +28,14 @@ server.registerTool(
  */
 const app = express();
 
-// IMPORTANT: do NOT use express.json() on /mcp; the MCP transport needs the raw body.
-// (You can still use express.json() for other routes if you add it with a different path.)
+// ⚠️ Do NOT add express.json() on /mcp — the MCP transport reads the raw body itself.
 
-// Permissive CORS for Inspector/n8n; expose both casings of the session header
+// Permissive CORS; expose both casings of the session header so clients can read it
 app.use(
   cors({
     origin: true,
     credentials: true,
-    exposedHeaders: ["Mcp-Session-Id", "mcp-session-id"]
+    exposedHeaders: ["Mcp-Session-Id", "mcp-session-id"],
   })
 );
 
@@ -50,8 +49,8 @@ app.get("/health", (_req, res) => res.status(200).json({ ok: true }));
 app.options("/mcp", (_req, res) => res.sendStatus(204));
 
 /**
- * Content negotiation helpers:
- * - Allow both JSON and SSE to avoid 406 across client builds.
+ * Normalize negotiation to avoid 406s:
+ * - Allow both JSON and SSE.
  */
 app.use("/mcp", (req, _res, next) => {
   req.headers["accept"] = "application/json, text/event-stream";
@@ -59,9 +58,7 @@ app.use("/mcp", (req, _res, next) => {
 });
 
 /**
- * Normalize session header casing on inbound requests:
- * Some clients echo back `Mcp-Session-Id`, others `mcp-session-id`.
- * Make both available so the SDK can find it regardless of case.
+ * Normalize inbound session header casing so the transport can find it.
  */
 app.use("/mcp", (req, _res, next) => {
   const sid =
@@ -70,14 +67,13 @@ app.use("/mcp", (req, _res, next) => {
     (req.get && req.get("Mcp-Session-Id")) ??
     (req.get && req.get("mcp-session-id"));
   if (sid) {
-    // reflect to both casings for maximum compatibility
     (req.headers as any)["mcp-session-id"] = sid;
     (req.headers as any)["Mcp-Session-Id"] = sid;
   }
   next();
 });
 
-// Request logger
+// Simple request logger
 app.use((req, res, next) => {
   const started = new Date();
   const ua = req.headers["user-agent"] ?? "-";
@@ -90,16 +86,20 @@ app.use((req, res, next) => {
   next();
 });
 
-// Main MCP endpoint — supported pattern for your SDK:
-//   - create transport with options
-//   - server.connect(transport)
-//   - transport.handleRequest(req, res)
+/**
+ * ✅ SINGLETON TRANSPORT
+ * Create one transport and reuse it across all requests so session state persists.
+ */
+const transport = new StreamableHTTPServerTransport({
+  sessionIdGenerator: () => randomUUID(),
+});
+
+// Connect the server to the transport once at startup
+await server.connect(transport);
+
+// Main MCP endpoint — reuse the singleton transport for each request
 app.all("/mcp", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: () => randomUUID()
-    });
-    await server.connect(transport);
     await transport.handleRequest(req, res);
   } catch (err) {
     next(err);
