@@ -29,14 +29,13 @@ server.registerTool(
 const app = express();
 
 // ⚠️ Do NOT use express.json() on /mcp — the MCP transport reads the raw body itself.
-// Keep CORS, health endpoints, logging, and negotiation helpers.
 
 app.use(
   cors({
     origin: true,
     credentials: true,
-    // IMPORTANT: expose the EXACT session header so browser/Electron clients (Inspector, n8n UI) can read it
-    exposedHeaders: ["Mcp-Session-Id"],
+    // Expose both casings so browser/Electron clients can read the session id
+    exposedHeaders: ["Mcp-Session-Id", "mcp-session-id"],
   })
 );
 
@@ -48,15 +47,6 @@ app.get("/health", (_req, res) => res.status(200).json({ ok: true }));
 
 // Preflight for /mcp
 app.options("/mcp", (_req, res) => res.sendStatus(204));
-
-/**
- * Normalize negotiation to avoid 406s:
- * - Allow both JSON and SSE.
- */
-app.use("/mcp", (req, _res, next) => {
-  req.headers["accept"] = "application/json, text/event-stream";
-  next();
-});
 
 // Request logger (logs Accept + UA + final status)
 app.use((req, res, next) => {
@@ -71,14 +61,17 @@ app.use((req, res, next) => {
   next();
 });
 
-// Main MCP endpoint — let the MCP transport read the raw request stream
+// Main MCP endpoint — pass req/res into the transport CONSTRUCTOR (SDKs that expect this pattern)
 app.all("/mcp", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const transport = new StreamableHTTPServerTransport({
+      req,
+      res,
       sessionIdGenerator: () => randomUUID(),
     });
+
     await server.connect(transport);
-    await transport.handleRequest(req, res);
+    await transport.handleRequest(); // with this SDK shape, no args here
   } catch (err) {
     next(err);
   }
