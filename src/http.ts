@@ -27,9 +27,10 @@ server.registerTool(
  * HTTP app
  */
 const app = express();
-app.use(express.json({ limit: "2mb" }));
 
-// Permissive CORS (good for Inspector/n8n). We can tighten later.
+// ⚠️ Do NOT use express.json() on /mcp — the MCP transport reads the raw body itself.
+// We keep CORS and everything else, but no body parser middleware.
+
 app.use(
   cors({
     origin: true,
@@ -48,19 +49,15 @@ app.get("/health", (_req, res) => res.status(200).json({ ok: true }));
 app.options("/mcp", (_req, res) => res.sendStatus(204));
 
 /**
- * Normalize response negotiation for /mcp to avoid 406:
- * - Allow both JSON and SSE. (Some clients prefer one or the other.)
- * - Set a friendly hint header used by some client builds.
+ * Normalize negotiation to avoid 406s:
+ * - Allow both JSON and SSE.
  */
 app.use("/mcp", (req, _res, next) => {
-  // Accept either format; order doesn't matter
   req.headers["accept"] = "application/json, text/event-stream";
-  // Some client/server combos also look at this hint — harmless if ignored
-  (req.headers as any)["x-mcp-response-format"] = "auto";
   next();
 });
 
-// Simple request logger; also logs final status
+// Request logger (logs Accept + UA + final status)
 app.use((req, res, next) => {
   const started = new Date();
   const ua = req.headers["user-agent"] ?? "-";
@@ -73,7 +70,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// Main MCP endpoint
+// Main MCP endpoint — let the MCP transport read the raw request stream
 app.all("/mcp", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const transport = new StreamableHTTPServerTransport({
